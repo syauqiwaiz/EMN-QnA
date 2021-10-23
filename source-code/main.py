@@ -51,4 +51,17 @@ def train(train_iter, model, optimizer, epochs, max_clip, valid_iter=None):
         total_loss = 0
      if train_iter.epoch == epochs:
             break
+         
+ def eval(test_iter, model):
+   total_error = 0
+
+   for k, batch in enumerate(test_iter, start=1):
+      story = batch.story
+      query = batch.query
+      answer = batch.answer
+      outputs = model(story.cuda(), query.cuda())
+      _, outputs = torch.max(outputs, -1)
+      total_error += torch.mean((outputs.cuda() != answer.view(-1).cuda()).float()).item()
+   print("#! average error: {:5.1f}".format(total_error / k * 100))
+       
         
