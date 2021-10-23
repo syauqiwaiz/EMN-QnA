@@ -63,5 +63,34 @@ def train(train_iter, model, optimizer, epochs, max_clip, valid_iter=None):
       _, outputs = torch.max(outputs, -1)
       total_error += torch.mean((outputs.cuda() != answer.view(-1).cuda()).float()).item()
    print("#! average error: {:5.1f}".format(total_error / k * 100))
+   
+def run(config):
+    print("#! preparing data...")
+    train_iter, valid_iter, test_iter, vocab = dataloader(config.batch_size, config.memory_size,
+                                                          config.task, config.joint, config.tenk)
+
+    print("#! instantiating model...")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = MemN2N(get_params(config), vocab).to(device)
+
+    if config.file:
+        with open(os.path.join(config.save_dir, config.file), 'rb') as f:
+            if torch.cuda.is_available():
+                state_dict = torch.load(f, map_location=lambda storage, loc: storage.cuda())
+            else:
+                state_dict = torch.load(f, map_location=lambda storage, loc: storage)
+            model.load_state_dict(state_dict)
+
+    if config.train:
+        print("#! training...")
+        optimizer = optim.Adam(model.parameters(), config.lr)
+        train(train_iter, model, optimizer, config.num_epochs, config.max_clip, valid_iter)
+        if not os.path.isdir(config.save_dir):
+            os.makedirs(config.save_dir)
+        torch.save(model.state_dict(), os.path.join(config.save_dir, get_fname(config)))
+
+    print("#! testing...")
+    with torch.no_grad():
+        eval(test_iter, model)
        
         
