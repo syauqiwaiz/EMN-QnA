@@ -1,12 +1,12 @@
 from collections import namedtuple
 
 import torch
-from torchtext.datasets import IMDB
+from torchtext.legacy.datasets import BABI20
 
 
-def dataloader(batch_size, memory_size, task, joint, tenk):
-    train_iter, valid_iter, test_iter, vocab = IMDB().iters(
-        batch_size=batch_size, memory_size=memory_size, task=task, joint=joint, tenK=tenk, device=torch.device("cpu"))
+def dataloader(batch_size, memory_size, task, joint, tenK):
+    train_iter, valid_iter, test_iter = BABI20.iters(
+        batch_size=batch_size, memory_size=memory_size, task=task, joint=joint, tenK=tenK, device=torch.device("cpu"))
     return train_iter, valid_iter, test_iter, train_iter.dataset.fields['query'].vocab
 
 
