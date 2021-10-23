@@ -42,3 +42,13 @@ def train(train_iter, model, optimizer, epochs, max_clip, valid_iter=None):
                 model.use_ls = False
          else:
                 valid_loss = loss
+          
+     if train_iter.epoch == next_epoch_to_report:
+        print("#! epoch {:d} average batch loss: {:5.4f}".format(
+            int(train_iter.epoch), total_loss / len(train_iter)))
+        next_epoch_to_report += 5
+     if int(train_iter.epoch) == train_iter.epoch:
+        total_loss = 0
+     if train_iter.epoch == epochs:
+            break
+        
