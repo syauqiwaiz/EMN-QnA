@@ -13,7 +13,8 @@ def dataloader(batch_size, memory_size, task, joint, tenK):
     return train_iter, valid_iter, test_iter, train_iter.dataset.fields['query'].vocab
 
 # Use dataloader to split train, test, valid and vocab
-train_iter, valid_iter, test_iter, vocab = dataloader(batch_size=32, memory_size=50, task=1, joint=False, tenK=False)
+train_iter, valid_iter, test_iter, vocab = dataloader(batch_size=32, memory_size=50, task=15, joint=False, tenK=False)
+
 
 # Parameters
 V = len(vocab)
@@ -32,81 +33,58 @@ class EMN (nn.Module):
 
     def forward(self, story, query):
 
-        ext_memory = []
+        ext_memory = story
+        ext_memory = self.embedA(ext_memory)
 
-        for sentence in story:
-            mi = self.embedA(sentence) #mi: torch.Size([50, 6, 3])
-            #print("mi: ", mi.shape)
-            ext_memory.append(mi)
+        a_embed = torch.sum(ext_memory, dim=2)
 
-        a_embed = torch.sum(torch.stack(ext_memory), dim=1) #a_embed: torch.Size([32, 6, 3])
-        #print("a_embed: ", a_embed.shape)
+        u = self.embedB(query)
 
-        u = self.embedB(query)#u: torch.Size([32, 3, 3])
-        #print("u: ", u.shape)
+        u = torch.sum(u, dim=1)
 
-        #reshape u from 32x3x3 to 32x9 to perform matrix multiplication with a_embed
-        u = u.reshape(32,9) #u: torch.Size([32,9])
+        inner_product = torch.einsum('ijk, ik->j', a_embed, u)
 
-        #reshape a_embed from 32x6x3 to 32x18 to perform matrix multiplication with u
-        a_embed = a_embed.reshape(32,18) #a_embed: torch.Size([32,18])
+        p = torch.softmax(inner_product.float(), dim=-1)
 
-        inner_product = torch.matmul(torch.t(u), a_embed) #inner_product: torch.Size([9, 18])
-        #print("inner_product:", inner_product.shape)
+        ci = torch.einsum('ijk, j->ijk',a_embed, p)
 
-        p = torch.softmax(inner_product.float(), dim=-1) #p: torch.Size([9, 18])
-        #print("p: ", p.shape)
+        o = torch.sum(ci, dim=1)
 
-        ci = torch.matmul(p, torch.t(a_embed)) #ci: torch.Size([9, 32])
-        #print("ci: ", ci.shape)
+        ten3 = torch.add(o, u)
 
-        o = torch.sum(ci, 0) #o: torch.Size([32])
-        #print("o: ", o.shape)
+        ten4 = self.LinW(ten3)
 
-        ten3 = torch.add(o, torch.t(u)) #ten3: torch.Size([9,32])
-        #print("ten3: ", ten3.shape)
+        a = torch.softmax(ten4, dim=1)
 
-        #reshape ten3 from 9x32 to 96x3 so it matches the linear layer, LinW of size 3x20
-        ten3 = ten3.reshape(96,3)
-
-        ten4 = self.LinW(ten3) #ten4: torch.Size([96, 20])
-        #print("ten4: ", ten4.shape)
-
-        a = torch.softmax(ten4, dim=0) #a: torch.Size([96, 20])
-        #print("a: ", a.shape)
-
-        #torch.max to get one tensor
-        #torch.mul it with vocab (20)
-        #torch.round to round off the value
-        return torch.round(torch.mul(torch.max(a), V))
+        return a
 
 #Initialize the model
 model = EMN()
 
 #Optimizer and Loss function
-loss = nn.MSELoss()
+loss = nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
+#Training the model
+
+total_loss = 0
 for i, batch in enumerate(train_iter):
-    if i < len(train_iter)-1:
 
-        story = batch.story
-        query = batch.query
-        answer = batch.answer
+    story = batch.story
+    query = batch.query
+    answer = batch.answer
 
-        optimizer.zero_grad()
-        output = model(story, query)
-        l = loss(output.type(torch.float32), answer[i].type(torch.float32))
-        l.backward()
-        optimizer.step()
+    optimizer.zero_grad()
+    output = model(story, query)
+    l = loss(output.float(), answer.squeeze(1))
+    l.backward()
+    optimizer.step()
 
-        # print("answer: ", answer[0].item()) #torch.Size([32, 1])
-        # print("output: ", output.item())#torch.Size([])
+    total_loss += l
 
-        if i <= len(train_iter):
-            print(f'Batch no. [{i+1}], Loss: {l.item():.4f}')
-    else:
-        break
+    print(f'Batch no. [{i+1}], Loss: {l.item():.3f}')
+
+print(f'Average Training Loss: {total_loss/len(train_iter):.2f}')
 
 
 
