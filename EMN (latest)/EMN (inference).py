@@ -163,21 +163,21 @@ class EMN (nn.Module):
 
         return a
 
-FILE = 'EMN20.pth'
+# FILE = 'EMN20.pth'
 
-model = EMN()
+# model = EMN()
 
-model.load_state_dict(torch.load(FILE))
-model.eval()
+# model.load_state_dict(torch.load(FILE))
+# model.eval()
 
-output = model(story,query)
+# output = model(story,query)
 
-print("Predicted answer: ", output)
+# print("Predicted answer: ", output)
 
-if output == answer:
-    print("\nThe answer is correct")
-else:
-    print("\nIncorrect. The answer is", answer)
+# if output == answer:
+#     print("\nThe answer is correct")
+# else:
+#     print("\nIncorrect. The answer is", answer)
 
 
 
