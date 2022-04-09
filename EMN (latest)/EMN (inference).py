@@ -114,8 +114,8 @@ story = torch.stack(sentences)
 
 query = toTensor(wswquery)
 
-V = 40
-d = 20
+V = len(vocab)
+d = vector_size
 
 class EMN (nn.Module):
 
@@ -163,7 +163,7 @@ class EMN (nn.Module):
 
         return a
 
-FILE = 'EMN.pth'
+FILE = 'EMN20.pth'
 
 model = EMN()
 
