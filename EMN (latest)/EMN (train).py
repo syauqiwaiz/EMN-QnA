@@ -149,7 +149,7 @@ test()
 
 #Save model
 
-#torch.save(model.state_dict(), "EMN.pth")
+#torch.save(model.state_dict(), "EMN20.pth")
 
 
 
