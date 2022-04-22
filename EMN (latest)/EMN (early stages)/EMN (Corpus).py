@@ -123,30 +123,16 @@ class EMN (nn.Module):
 
         a = torch.softmax(ten4, dim=-1) # 1x7 Tensor
 
+        a = torch.argmax(a)
+
         return a
 
 model = EMN()
 output = model(story, query)
+print(output)
+print(word_to_ix)
 
-loss = nn.MSELoss()
-optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
-
-EPOCH = 20
-
-for epoch in range(EPOCH):
-
-    model.zero_grad()
-    output = model(story, query)
-    output = output.to(torch.float32)
-    answer = answer.to(torch.float32)
-    l = loss(output, answer)
-    optimizer.zero_grad()
-    l.backward()
-    optimizer.step()
-
-    if epoch <= EPOCH:
-        print(f'Epoch [{epoch + 1}/{EPOCH}], Loss: {l.item():.4f}')
 
 
 
