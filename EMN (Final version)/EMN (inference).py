@@ -1,3 +1,8 @@
+# Implemented in PyCharm IDE using Python 3.9.1
+# Machine Learning framework used is PyTorch 1.8.0
+# PyTorch "torchtext" version 0.9.0
+
+#import necessary libraries
 import torch
 import torch.nn as nn
 from nltk import tokenize
@@ -6,10 +11,9 @@ from nltk import tokenize
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-#create functions
+#create pre-processing functions
 
 punctuations = '''!()-[]{};:'"”“\,<>./?@#$%^&*_~'''
-stopwords = ["the", "a", "is"]
 
 def remove_punct(sentence):
     for element in sentence:
@@ -30,48 +34,60 @@ def create_vocab(story, query):
     vocab.update(query)
     vocab.add("<unk>")
     vocab.add("<pad>")
+    #vocab.add(answer)
     sorted_vocab = sorted(vocab)
     vocab = {word: ind for ind, word in enumerate(sorted_vocab)}
     return vocab
 
-vector_size =20
-def pad_window(sentence, vector_size, pad_token="<pad>"):
-  window = [pad_token] * vector_size
+#vector size is different for every task and modified manually
+vector_size_story =20
+def pad_window_story(sentence, vector_size_story, pad_token="<pad>"):
+  window = [pad_token] * vector_size_story
+  for i in range(len(sentence)):
+      window[i+1] = sentence[i]
+  return window
+
+vector_size_query =10
+def pad_window_query(sentence, vector_size_query, pad_token="<pad>"):
+  window = [pad_token] * vector_size_query
   for i in range(len(sentence)):
       window[i+1] = sentence[i]
   return window
 
 def ToIndices(sentence, vocab):
-  indices = []
-  for token in sentence:
+    indices = []
+    for token in sentence:
       if token in sentence:
         index = vocab[token]
       else:
         index = vocab["<unk>"]
       indices.append(index)
-  return indices
+    return indices
 
-def toTensor(sentence):
-    sent = pad_window(sentence, vector_size=vector_size)
+def toTensor_story(sentence):
+    sent = pad_window_story(sentence, vector_size_story=vector_size_story)
+    ind = ToIndices(sent, vocab)
+    sentence_tensor = torch.tensor(ind, dtype=torch.long)
+    return sentence_tensor
+
+def toTensor_query(sentence):
+    sent = pad_window_query(sentence, vector_size_query=vector_size_query)
     ind = ToIndices(sent, vocab)
     sentence_tensor = torch.tensor(ind, dtype=torch.long)
     return sentence_tensor
 
 def toAnswer(answer):
     for key, value in vocab.items():
-         if answer.item() == value:
+         if answer[value] == value:
              return key
 
-#Prompt
+#take user input
 
-#raw_supporting_sentences = input("Please provide a few supporting sentences: ")
-#raw_query = input("Please input the question: ")
+raw_supporting_sentences = input("Input any supporting sentence(s): ")
+raw_query = input("Input the question: ")
 
-raw_supporting_sentences = "Ali go to the kitchen. Mary is in the bathroom. Ali dropped the milk."
-
-raw_query = "Where is the milk?"
-
-answer = "kitchen"
+#If the user input does not have the answer in it, add answer manually to vocab
+#answer = "example_answer"
 
 
 ### Preprocess text ###
@@ -91,31 +107,48 @@ prequery = remove_punct(raw_query)
 npstory = [prep_sentence(sent) for sent in presentences]
 npquery = prep_sentence(prequery)
 
-#Remove stopwords
-wswstory = []
-for sentence in npstory:
-    removed_sw =  [word for word in sentence if not word in stopwords]
-    wswstory.append(removed_sw)
-
-wswquery =  [word for word in npquery if not word in stopwords]
-
 
 ### Implementation ###
 
 #Create vocabulary
-vocab = create_vocab(wswstory, wswquery)
+vocab = create_vocab(npstory, npquery)
 
 #Convert to tensors
 sentences = []
-for sentence in wswstory:
-    sent = toTensor(sentence)
+for sentence in npstory:
+    sent = toTensor_story(sentence)
     sentences.append(sent)
+
+query = toTensor_query(npquery)
+
+#input sentences need to be of the same size of bAbI dataset [batch_size x memory_size x *sentence length*]
+#query: [batch_size x *sentence length*]
+
+#create memory size for input
+memory_size =50
+
+for _ in range(memory_size-len(npstory)):
+    zero_tensor = torch.zeros([vector_size_story], dtype=int)
+    sentences.append(zero_tensor)
 story = torch.stack(sentences)
 
-query = toTensor(wswquery)
+#create batch size for input
+batch_size = 32
 
-V = len(vocab)
-d = vector_size
+list_story = []
+for _ in range(batch_size):
+    list_story.append(story)
+batch_story = torch.stack(list_story)
+
+list_query = []
+for _ in range(batch_size):
+    list_query.append(query)
+batch_query = torch.stack(list_query)
+
+#Manually modify embedding shape according to task
+V = 40
+d = 20
+num_hops = 3
 
 class EMN (nn.Module):
 
@@ -123,61 +156,65 @@ class EMN (nn.Module):
         super(EMN, self).__init__()
 
         #Create Embeddings
-        self.embedA = nn.Embedding(V, d)
-        self.embedB = nn.Embedding(V, d)
-        self.embedC = nn.Embedding(V, d)
+        self.embedA = nn.Embedding(V, d, padding_idx=0)
+        self.embedB = nn.Embedding(V, d, padding_idx=0)
+        self.embedC = nn.Embedding(V, d, padding_idx=0)
         self.LinW = nn.Linear(d, V)
+
+        self.embedA.weight.data.normal_(0, 0.1)
+        self.embedB.weight.data.normal_(0, 0.1)
+        self.embedC.weight.data.normal_(0, 0.1)
+        self.LinW.weight.data.normal_(-0.25, 0.25)
+
 
     def forward(self, story, query):
         self.story = story
         self.query = query
 
-        a_embed = self.embedA(self.story)
-        a_embed = torch.sum(a_embed, dim=0)
-
         u = self.embedB(self.query)
         u = torch.sum(u, dim=1)
 
-        inner_product = torch.matmul(torch.t(u), a_embed)
+        for k in range(num_hops):
+            a_embed = self.embedA(self.story)
+            a_embed = torch.sum(a_embed, dim=2)
 
-        p = torch.softmax(inner_product.float(), dim=-1)
+            c_embed = self.embedC(self.story)
+            c = torch.sum(c_embed, dim=2)
 
-        c_embed = self.embedC(self.story)
-        c_embed = torch.sum(c_embed, dim=0)
+            ip = torch.bmm(a_embed, u.unsqueeze(2)).squeeze()
 
-        p = torch.unsqueeze(p, dim=1)
+            p = torch.softmax(ip, -1).unsqueeze(1)
 
-        ci = torch.matmul(c_embed, p)
+            o = torch.bmm(p, c).squeeze(1)
+            u = o + u
 
-        o = torch.sum(ci, dim=1)
-
-        tensor_3 = torch.add(o, u)
-
-        tensor_4 = self.LinW(tensor_3)
-
-        a = torch.softmax(tensor_4, dim=-1)
-
-        a = torch.argmax(a, dim=-1, keepdim=True)
-
-        a = toAnswer(a)
+        a = self.LinW(u)
 
         return a
 
-# FILE = 'EMN20.pth'
+if __name__ == '__main__':
 
-# model = EMN()
+    #Load saved model
+    FILE = 'EMN.pth'
 
-# model.load_state_dict(torch.load(FILE))
-# model.eval()
+    model = EMN()
+    model.load_state_dict(torch.load(FILE))
+    model.eval()
 
-# output = model(story,query)
+    #pass pre-processed inputs to loaded model
+    output = model(batch_story,batch_query)
 
-# print("Predicted answer: ", output)
+    a = torch.argmax(output, dim=-1, keepdim=True)
 
-# if output == answer:
-#     print("\nThe answer is correct")
-# else:
-#     print("\nIncorrect. The answer is", answer)
+    a = toAnswer(a)
+
+    #get predicted answer
+    print("Predicted answer: ", a)
+
+
+
+
+
 
 
 
