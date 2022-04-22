@@ -200,6 +200,6 @@ if args.tensorboard == True:
 
 #Save model
 if args.save == True:
-    torch.save(model.state_dict(), "EMN14.pth")
+    torch.save(model.state_dict(), "EMN.pth")
 
 
