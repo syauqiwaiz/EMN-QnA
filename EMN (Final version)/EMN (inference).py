@@ -7,14 +7,9 @@ import torch
 import torch.nn as nn
 from nltk import tokenize
 
-#set device
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
-#create pre-processing functions
-
 punctuations = '''!()-[]{};:'"”“\,<>./?@#$%^&*_~'''
 
+#create pre-processing functions
 def remove_punct(sentence):
     for element in sentence:
         if element in punctuations:
